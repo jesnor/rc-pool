@@ -201,7 +201,12 @@ impl<'t, T> WeakRefTrait for WeakRef<'t, T> {
     #[must_use]
     fn strong(&self) -> Option<StrongRef<'t, T>> {
         if self.is_valid() {
-            assert_ne!(self.slot.count.get(), MUT_REF_COUNT);
+            assert_ne!(
+                self.slot.count.get(),
+                MUT_REF_COUNT,
+                "Already borrowed as mutable!"
+            );
+
             Some(StrongRef::new(self.slot))
         } else {
             None
