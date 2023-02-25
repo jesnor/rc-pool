@@ -6,7 +6,7 @@ use std::cell::RefCell;
 struct Player<'t> {
     game: GameRef<'t>,
     name: String,
-    friends: RefCell<Vec<PlayerWeakRef<'t>>>,
+    friends: Vec<PlayerWeakRef<'t>>,
 }
 
 type PlayerRef<'t> = StrongRef<'t, Player<'t>>;
@@ -15,8 +15,6 @@ type PlayerWeakRef<'t> = WeakRef<'t, Player<'t>>;
 struct Game<'t> {
     players: &'t RcVecPool<Player<'t>>,
 }
-
-type GameRef<'t> = &'t Game<'t>;
 
 impl<'t> Game<'t> {
     fn new(players: &'t RcVecPool<Player<'t>>) -> Self {
@@ -43,19 +41,21 @@ impl<'t> PartialEq for Game<'t> {
     }
 }
 
+type GameRef<'t> = &'t Game<'t>;
+
 fn main() {
     let players = RcVecPool::new_vec(100);
     let game = Game::new(&players);
-    let p1 = game.add_player("Sune");
-    let p2 = game.add_player("Berra");
-    p1.friends.borrow_mut().push(p2.weak());
-    p2.friends.borrow_mut().push(p1.weak());
+    let mut p1 = game.add_player("Sune");
+    let mut p2 = game.add_player("Berra");
+    p1.borrow_mut().friends.push(p2.weak());
+    p2.borrow_mut().friends.push(p1.weak());
 
     for _ in 0..2 {
         for p in game.players.iter() {
             println!("{}", p.name);
 
-            for f in p.friends.borrow().iter().flat_map(|r| r.strong()) {
+            for f in p.friends.iter().flat_map(|r| r.strong()) {
                 println!("  {}", f.name);
             }
 

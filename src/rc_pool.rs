@@ -32,7 +32,7 @@ impl<T> Slot<T> {
     #[must_use]
     #[allow(clippy::mut_from_ref)]
     unsafe fn get_mut(&self) -> &mut T {
-        debug_assert!(self.count.get() == 1);
+        debug_assert!(self.count.get() == MUT_REF_COUNT);
         (*self.value.get()).assume_init_mut()
     }
 
