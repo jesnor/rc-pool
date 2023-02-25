@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use rc_pool::{StrongRefTrait, WeakRefTrait};
 use std::{
     cell::RefCell,
