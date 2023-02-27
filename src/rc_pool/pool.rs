@@ -48,6 +48,25 @@ impl<T> RcPool<T> {
         Self { header, page_size }
     }
 
+    fn add_page(&self) -> &Page<T> {
+        unsafe {
+            let first_page = (*self.header.first_page.get()).take();
+
+            let new_page = Box::new(Page::new(
+                self.header.deref() as *const _,
+                self.page_size,
+                first_page,
+            ));
+
+            self.header
+                .first_free_page
+                .set(new_page.deref() as *const _);
+
+            *self.header.first_page.get() = Some(new_page);
+            self.header.first_page()
+        }
+    }
+
     #[must_use]
     pub fn insert(&self, value: T) -> StrongRef<T> {
         let mut page = unsafe { self.header.first_free_page() };
@@ -66,23 +85,8 @@ impl<T> RcPool<T> {
             }
         }
 
-        unsafe {
-            let first_page = (*self.header.first_page.get()).take();
-
-            let new_page = Box::new(Page::new(
-                self.header.deref() as *const _,
-                self.page_size,
-                first_page,
-            ));
-
-            self.header
-                .first_free_page
-                .set(new_page.deref() as *const _);
-
-            *self.header.first_page.get() = Some(new_page);
-
-            self.header.first_page().insert(value)
-        }
+        // No free slot in any page, add a new page
+        unsafe { self.add_page().insert(value) }
     }
 
     fn first_page(&self) -> &Page<T> {
@@ -121,7 +125,7 @@ impl<'t, T: 't> Iterator for RcPoolIterator<'t, T> {
                     .map(|p| p.deref() as *const _);
 
                 self.index = 0;
-            } else if let Some(r) = page.get(self.index) {
+            } else if let Some(r) = unsafe { page.get(self.index) } {
                 self.index += 1;
                 return Some(r);
             } else {

@@ -1,10 +1,9 @@
-#![allow(unused)]
-
 use rc_pool::{RcPool, StrongRef, StrongRefTrait, WeakRef, WeakRefTrait};
-use std::cell::RefCell;
 
 struct Player<'t> {
+    #[allow(unused)]
     game: GameRef<'t>,
+
     name: String,
     friends: Vec<PlayerWeakRef<'t>>,
 }

@@ -37,13 +37,13 @@ impl<T> Page<T> {
             }),
         });
 
-        for i in 0..slots.capacity() {
+        for i in 1..slots.capacity() {
             slots.push(SlotUnion {
                 slot: ManuallyDrop::new(Slot {
                     value: MaybeUninit::uninit().into(),
                     version: 0.into(),
                     count: 0.into(),
-                    index: (i as Index + 1).into(),
+                    index: (i as Index).into(),
                 }),
             })
         }
@@ -60,24 +60,19 @@ impl<T> Page<T> {
     }
 
     #[must_use]
-    pub fn get(&self, index: Index) -> Option<StrongRef<T>> {
-        self.slots.get(index as usize + 1).and_then(|slot| unsafe {
-            if slot.slot.is_free() {
-                None
-            } else {
-                Some(StrongRef::new(&slot.slot))
-            }
-        })
+    pub(crate) unsafe fn get(&self, index: Index) -> Option<StrongRef<T>> {
+        let slot = self.slots.get_unchecked(index as usize + 1);
+
+        if slot.slot.is_free() {
+            None
+        } else {
+            Some(StrongRef::new(&slot.slot))
+        }
     }
 
     #[must_use]
     pub(crate) fn len(&self) -> Index {
         self.header().count.get()
-    }
-
-    #[must_use]
-    fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     #[must_use]
@@ -90,11 +85,11 @@ impl<T> Page<T> {
     pub(crate) unsafe fn insert<'t>(&'t self, value: T) -> StrongRef<'t, T> {
         let header = self.header();
         let index = header.first_free_slot.get() + 1;
-        let slot = self.slots.get_unchecked(index as usize);
-        slot.slot.set_value(value);
-        header.first_free_slot.set(slot.slot.index.get());
+        let slot = &self.slots.get_unchecked(index as usize).slot;
+        slot.set_value(value);
+        header.first_free_slot.set(slot.index.get());
         header.count.add(1);
-        slot.slot.index.set(index);
-        StrongRef::new(&slot.slot)
+        slot.index.set(index - 1);
+        StrongRef::new(slot)
     }
 }
