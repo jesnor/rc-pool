@@ -23,8 +23,7 @@ impl<T> PoolHeader<T> {
 }
 
 pub struct RcPool<T, const MANUAL_DROP: bool> {
-    header: Box<PoolHeader<T>>,
-    page_size: Index,
+    header: Box<PoolHeader<T>>
 }
 
 impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
@@ -45,16 +44,16 @@ impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
                 .set(header.first_page().deref() as *const _);
         }
 
-        Self { header, page_size }
+        Self { header }
     }
 
-    fn add_page(&self) -> &Page<T> {
+    fn add_page(&self, page_size: Index) -> &Page<T> {
         unsafe {
             let first_page = (*self.header.first_page.get()).take();
 
             let new_page = Box::new(Page::new(
                 self.header.deref() as *const _,
-                self.page_size,
+                page_size,
                 first_page,
             ));
 
@@ -68,14 +67,14 @@ impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
     }
 
     #[must_use]
-    pub fn insert(&self, value: T) -> StrongRef<T, MANUAL_DROP> {
+    pub fn add(&self, value: T) -> Either<StrongRef<T, MANUAL_DROP>, T> {
         let mut page = unsafe { self.header.first_free_page() };
 
         loop {
             if page.len() < page.capacity() {
                 let r = unsafe { page.insert(value) };
                 self.header.first_free_page.set(page as *const _); // Set this page as the first with free slots
-                return StrongRef::new(r);
+                return Either::Left(StrongRef::new(r));
             }
 
             if let Some(next_free_page) = page.header().next_free_page.get() {
@@ -85,8 +84,15 @@ impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
             }
         }
 
-        // No free slot in any page, add a new page
-        StrongRef::new(unsafe { self.add_page().insert(value) })
+        Either::Right(T)
+    }
+
+    #[must_use]
+    pub fn add_grow(&self, page_size: Index, value: T) -> StrongRef<T, MANUAL_DROP> {
+        match self.add(value) {
+            Either::Left(r) => r,
+            Either::Right(v) => StrongRef::new(unsafe { self.add_page(page_size).insert(v) })
+        }
     }
 
     fn first_page(&self) -> &Page<T> {
