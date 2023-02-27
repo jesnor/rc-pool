@@ -1,5 +1,5 @@
 use super::slot::Slot;
-use crate::{CellTrait, Index, PoolHeader, StrongRef};
+use crate::{CellTrait, Index, PoolHeader};
 use std::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
@@ -60,13 +60,13 @@ impl<T> Page<T> {
     }
 
     #[must_use]
-    pub(crate) unsafe fn get(&self, index: Index) -> Option<StrongRef<T>> {
+    pub(crate) unsafe fn get(&self, index: Index) -> Option<&Slot<T>> {
         let slot = self.slots.get_unchecked(index as usize + 1);
 
         if slot.slot.is_free() {
             None
         } else {
-            Some(StrongRef::new(&slot.slot))
+            Some(&slot.slot)
         }
     }
 
@@ -82,7 +82,7 @@ impl<T> Page<T> {
 
     #[must_use]
     #[allow(clippy::needless_lifetimes)]
-    pub(crate) unsafe fn insert<'t>(&'t self, value: T) -> StrongRef<'t, T> {
+    pub(crate) unsafe fn insert(&self, value: T) -> &Slot<T> {
         let header = self.header();
         let index = header.first_free_slot.get() + 1;
         let slot = &self.slots.get_unchecked(index as usize).slot;
@@ -90,6 +90,6 @@ impl<T> Page<T> {
         header.first_free_slot.set(slot.index.get());
         header.count.add(1);
         slot.index.set(index - 1);
-        StrongRef::new(slot)
+        slot
     }
 }

@@ -1,5 +1,7 @@
 use rc_pool::{RcPool, StrongRef, StrongRefTrait, WeakRef, WeakRefTrait};
 
+const MANUAL_DROP: bool = true;
+
 struct Player<'t> {
     #[allow(unused)]
     game: GameRef<'t>,
@@ -8,15 +10,16 @@ struct Player<'t> {
     friends: Vec<PlayerWeakRef<'t>>,
 }
 
-type PlayerRef<'t> = StrongRef<'t, Player<'t>>;
-type PlayerWeakRef<'t> = WeakRef<'t, Player<'t>>;
+type PlayerRef<'t> = StrongRef<'t, Player<'t>, MANUAL_DROP>;
+type PlayerWeakRef<'t> = WeakRef<'t, Player<'t>, MANUAL_DROP>;
+type PlayerPool<'t> = RcPool<Player<'t>, MANUAL_DROP>;
 
 struct Game<'t> {
-    players: &'t RcPool<Player<'t>>,
+    players: &'t PlayerPool<'t>,
 }
 
 impl<'t> Game<'t> {
-    fn new(players: &'t RcPool<Player<'t>>) -> Self {
+    fn new(players: &'t PlayerPool<'t>) -> Self {
         Self { players }
     }
 

@@ -22,12 +22,12 @@ impl<T> PoolHeader<T> {
     }
 }
 
-pub struct RcPool<T> {
+pub struct RcPool<T, const MANUAL_DROP: bool> {
     header: Box<PoolHeader<T>>,
     page_size: Index,
 }
 
-impl<T> RcPool<T> {
+impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
     #[must_use]
     pub fn new(page_size: Index) -> Self {
         let header: Box<PoolHeader<T>> = Box::new(PoolHeader {
@@ -68,14 +68,14 @@ impl<T> RcPool<T> {
     }
 
     #[must_use]
-    pub fn insert(&self, value: T) -> StrongRef<T> {
+    pub fn insert(&self, value: T) -> StrongRef<T, MANUAL_DROP> {
         let mut page = unsafe { self.header.first_free_page() };
 
         loop {
             if page.len() < page.capacity() {
                 let r = unsafe { page.insert(value) };
                 self.header.first_free_page.set(page as *const _); // Set this page as the first with free slots
-                return r;
+                return StrongRef::new(r);
             }
 
             if let Some(next_free_page) = page.header().next_free_page.get() {
@@ -86,7 +86,7 @@ impl<T> RcPool<T> {
         }
 
         // No free slot in any page, add a new page
-        unsafe { self.add_page().insert(value) }
+        StrongRef::new(unsafe { self.add_page().insert(value) })
     }
 
     fn first_page(&self) -> &Page<T> {
@@ -95,7 +95,7 @@ impl<T> RcPool<T> {
             .unwrap()
     }
 
-    pub fn iter(&self) -> RcPoolIterator<T> {
+    pub fn iter(&self) -> RcPoolIterator<T, MANUAL_DROP> {
         RcPoolIterator {
             page: Some(self.first_page() as *const _),
             index: 0,
@@ -104,14 +104,14 @@ impl<T> RcPool<T> {
     }
 }
 
-pub struct RcPoolIterator<'t, T> {
+pub struct RcPoolIterator<'t, T, const MANUAL_DROP: bool> {
     page: Option<*const Page<T>>,
     index: Index,
     phantom: PhantomData<&'t mut ()>,
 }
 
-impl<'t, T: 't> Iterator for RcPoolIterator<'t, T> {
-    type Item = StrongRef<'t, T>;
+impl<'t, T: 't, const MANUAL_DROP: bool> Iterator for RcPoolIterator<'t, T, MANUAL_DROP> {
+    type Item = StrongRef<'t, T, MANUAL_DROP>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(p) = self.page {
@@ -127,7 +127,7 @@ impl<'t, T: 't> Iterator for RcPoolIterator<'t, T> {
                 self.index = 0;
             } else if let Some(r) = unsafe { page.get(self.index) } {
                 self.index += 1;
-                return Some(r);
+                return Some(StrongRef::new(r));
             } else {
                 self.index += 1;
             }
