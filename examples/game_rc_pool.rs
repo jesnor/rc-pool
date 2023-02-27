@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use rc_pool::{RcVecPool, StrongRef, StrongRefTrait, WeakRef, WeakRefTrait};
+use rc_pool::{RcPool, StrongRef, StrongRefTrait, WeakRef, WeakRefTrait};
 use std::cell::RefCell;
 
 struct Player<'t> {
@@ -13,25 +13,20 @@ type PlayerRef<'t> = StrongRef<'t, Player<'t>>;
 type PlayerWeakRef<'t> = WeakRef<'t, Player<'t>>;
 
 struct Game<'t> {
-    players: &'t RcVecPool<Player<'t>>,
+    players: &'t RcPool<Player<'t>>,
 }
 
 impl<'t> Game<'t> {
-    fn new(players: &'t RcVecPool<Player<'t>>) -> Self {
+    fn new(players: &'t RcPool<Player<'t>>) -> Self {
         Self { players }
     }
 
     fn add_player(&'t self, name: &str) -> PlayerRef<'t> {
-        let p = self
-            .players
-            .insert(Player {
-                game: self,
-                name: name.to_owned(),
-                friends: Default::default(),
-            })
-            .unwrap();
-
-        p
+        self.players.insert(Player {
+            game: self,
+            name: name.to_owned(),
+            friends: Default::default(),
+        })
     }
 }
 
@@ -44,7 +39,7 @@ impl<'t> PartialEq for Game<'t> {
 type GameRef<'t> = &'t Game<'t>;
 
 fn main() {
-    let players = RcVecPool::new_vec(100);
+    let players = RcPool::new(1);
     let game = Game::new(&players);
     let mut p1 = game.add_player("Sune");
     let mut p2 = game.add_player("Berra");
