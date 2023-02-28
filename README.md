@@ -2,7 +2,7 @@
 
 ## Overview
 
-RcPool is a memory pool with items of the same type. It consists of a number of (minimum one) pages, each with a fixed number of item slots (not necessarily the same number). Item slots are automatically re-used in a memory safe way when possible. RcPool can be seen as a combination of/alternative to Rc/Weak, SlotMap and RefCell.
+RcPool is a memory pool containing items of the same type. It consists of a number of (minimum one) pages, each with a fixed number of item slots (not necessarily the same number for all pages). Item slots are automatically re-used in a memory safe way whenever possible. RcPool can be seen as a combination of/alternative to Rc/Weak, SlotMap and RefCell.
 
 
 ## Features
@@ -18,7 +18,7 @@ RcPool is a memory pool with items of the same type. It consists of a number of 
 
 ## Pool Capacity
 
-When an RcPool is created it allocates one page with a fixed number of item slots. When inserting a new item there's an option to dynamically allocate a new slot page if there are no free slots in any of the current pages. The number of slots that newly allocated pages gets can be changed at any time.
+When an RcPool is created it allocates one page with a fixed number of item slots. When inserting a new item there's an option to dynamically allocate a new slot page if there are no free slots in any of the current pages. The number of slots in newly allocated pages can be changed at any time.
 
 Since there's no way of knowing how many weak references exists for slot in a page, a page can never be free'd and thus the pool capacity will never shrink. 
 
