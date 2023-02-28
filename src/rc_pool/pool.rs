@@ -1,5 +1,5 @@
 use super::page::Page;
-use crate::{Index, StrongRef};
+use crate::{Either, Index, StrongRef};
 use std::marker::PhantomData;
 use std::ptr::null;
 use std::{
@@ -23,18 +23,19 @@ impl<T> PoolHeader<T> {
 }
 
 pub struct RcPool<T, const MANUAL_DROP: bool> {
-    header: Box<PoolHeader<T>>
+    header: Box<PoolHeader<T>>,
+    page_len: Cell<Index>,
 }
 
 impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
     #[must_use]
-    pub fn new(page_size: Index) -> Self {
+    pub fn new(page_len: Index) -> Self {
         let header: Box<PoolHeader<T>> = Box::new(PoolHeader {
             first_page: UnsafeCell::new(None),
             first_free_page: Cell::new(null()),
         });
 
-        let first_page = Box::new(Page::new(header.deref() as *const _, page_size, None));
+        let first_page = Box::new(Page::new(header.deref() as *const _, page_len, None));
 
         unsafe {
             *header.first_page.get() = Some(first_page);
@@ -44,7 +45,21 @@ impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
                 .set(header.first_page().deref() as *const _);
         }
 
-        Self { header }
+        Self {
+            header,
+            page_len: page_len.into(),
+        }
+    }
+
+    /// Sets the number of slots of newly created pages
+    pub fn set_page_len(&self, page_size: Index) {
+        self.page_len.set(page_size)
+    }
+
+    /// Returns the number of slots for newly created pages
+    #[must_use]
+    pub fn page_len(&self) -> Index {
+        self.page_len.get()
     }
 
     fn add_page(&self, page_size: Index) -> &Page<T> {
@@ -66,8 +81,11 @@ impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
         }
     }
 
+    /// Inserts a new item into the pool
+    /// If there is a free slot, creates and returns a strong reference to that slot,
+    /// otherwise returns the item
     #[must_use]
-    pub fn add(&self, value: T) -> Either<StrongRef<T, MANUAL_DROP>, T> {
+    pub fn try_insert(&self, value: T) -> Either<StrongRef<T, MANUAL_DROP>, T> {
         let mut page = unsafe { self.header.first_free_page() };
 
         loop {
@@ -84,14 +102,20 @@ impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
             }
         }
 
-        Either::Right(T)
+        Either::Right(value)
     }
 
+    /// Inserts a new item into the pool
+    /// If there is a free slot, creates and returns a strong reference to that slot,
+    /// otherwise a new slot page of size [page_len()] will be added and the item is placed inside it
     #[must_use]
-    pub fn add_grow(&self, page_size: Index, value: T) -> StrongRef<T, MANUAL_DROP> {
-        match self.add(value) {
+    pub fn insert(&self, value: T) -> StrongRef<T, MANUAL_DROP> {
+        match self.try_insert(value) {
             Either::Left(r) => r,
-            Either::Right(v) => StrongRef::new(unsafe { self.add_page(page_size).insert(v) })
+
+            Either::Right(v) => {
+                StrongRef::new(unsafe { self.add_page(self.page_len.get()).insert(v) })
+            }
         }
     }
 
@@ -101,6 +125,7 @@ impl<T, const MANUAL_DROP: bool> RcPool<T, MANUAL_DROP> {
             .unwrap()
     }
 
+    #[must_use]
     pub fn iter(&self) -> RcPoolIterator<T, MANUAL_DROP> {
         RcPoolIterator {
             page: Some(self.first_page() as *const _),

@@ -2,31 +2,32 @@
 
 ## Overview
 
-RcPool is a single threaded memory pool with items of the same type. It consists of a number of (minimum one) fixed size pages with item slots. Slots are automatically re-used in a safe way when possible. It can be seen as a combination of/replacement for Rc/Weak, SlotMap and RefCell.
+RcPool is a memory pool with items of the same type. It consists of a number of (minimum one) pages with a fixed number of item slots. Item slots are automatically re-used in a memory safe way when possible. In some ways RcPool can be seen as a combination of/alternative to Rc/Weak, SlotMap and RefCell.
 
 
 ## Features
 
 - Very fast, constant time allocation and free'ing (similar to SlotMap)
-- Can optionally grow by allocating new pool pages from heap memory when full (currently it never shrinks though)
-- Weak references are Copy which makes them easy to pass around and put in Cell's etc.
+- Can optionally grow by allocating new pool pages from heap memory when full (currently pages are never free'd though)
+- Weak references are Copy which makes them easy and cheap to pass around and put in Cell's etc.
 - Allows mutable access to an item with only one strong reference (similar to a RefCell)
 - Configurable manual or automatic dropping of items
 - Supports iteration over all live pool items
+- Uses interior mutability so items can be inserted and removed through a shared pool reference (similar to how normal heap allocators works)
 
 
 ## Pool Capacity
 
-The RcPool capacity can optionally grow automatically when new items are added and there are no free slots available. This is customizable for every addition of a new item. The growth amount is also customizable. Currently the RcPool capacity will never shrink (this might change in the future).
+When an RcPool is created it allocates one page of a fixed number of item slots. When inserting a new item there's an option to dynamically allocate a new slot page if there are no free slots in any of the pools pages. Currently pool pages are never free'd (this might change in the future). The size of newly allocated pages can be changed at any time.
 
 
 ## Reference Types
 
-RcPool supports two type of references:
+RcPool supports two types of references:
 
 - Weak references (similar to Weak and SlotMap's Key) consists of a shared reference to an item slot and the slot version number it expects in the slot. If the slot version number is different from the weak reference's, it cannot be upgraded to a strong reference. The size of a weak reference is two machine words (2x usize).
 
-- Strong references (similar to Rc) which consists of a shared reference to an item slot. Strong references support obtaining a Rust shared reference to the item and also a Rust mutable/unique reference if it's the only strong reference currently in existence (similar to RefCell). The size of strong reference is one machine word (usize).
+- Strong references (similar to Rc) which consists of a shared reference to an item slot. Strong references support obtaining a Rust shared reference to the item using the Deref trait and also a Rust mutable/unique reference if it's the only strong reference currently in existence (similar to RefCell). The size of strong reference is one machine word (usize).
 
 
 ## Item Dropping
@@ -37,7 +38,12 @@ Each RcPool can be configured in one of two drop modes:
 
 - Manual: similar to SlopMap in that items are only dropped explicitly. This can be useful if you want to only use weak references and use the pool itself as item owner.
 
-Note that regardless of drop mode the dropped item memory can always be re-used even though there are weak references remaining. 
+Note that regardless of drop mode the dropped item memory can always be re-used even though there are weak references remaining.
+
+
+# Thread Safety
+
+RcPool is not thread safe, so only use it from one thread or behind a Mutex or similar. If you want to safely share items between threads just use Arc with normal heap allocation. It's heavily optimized and safe for multithreaded usage. It doesn't make much sense to try to replace that.
 
 
 ## Comparison with Rc/Weak
@@ -49,13 +55,15 @@ Similarities:
 
 Differences:
 
-- RcPool can also be configured to require manual dropping of items instead of automatic
+- RcPool can also be configured to require manual dropping of items instead of automatic when all shared references are dropped
 
-- Since RcPool uses versioning instead of a weak reference count it will re-use the memory of a dropped item even if there are weak references remaining. With Rc/Weak you have to drop all strong *and* weak references.
+- Since RcPool uses versioning instead of a weak reference count it will re-use the slot/memory of a dropped item even if there are weak references remaining. With Rc/Weak you have to drop all strong **and** weak references.
 
-- RcPool's weak references are Copy which makes them easier to pass around and put in Cell's for example
-- Weak is only one machine word in size, but RcPool's weak references are two machine words
+- RcPool's weak references are Copy which makes them easy and efficient to pass around and put in Cell's for example
+- Weak is only one machine word in size, while RcPool's weak references are two machine words
+
 - You can obtain a mutable reference to a RcPool item with one strong reference even if there are weak references to it. This enables using it like a RefCell.
+
 - RcPool allocation and free'ing is much faster than using the system allocator like Rc does (TODO: benchmark)
 
 
@@ -63,17 +71,22 @@ Differences:
 
 Similarities:
 
-- RcPool's weak references and SlotMap keys are similar in that they consists of a version number and a shared index/reference, and they both implement Copy
+- RcPool's weak references and SlotMap keys are similar in that they consists of a version number and a shared index/reference
+
+- Like SlotMap keys, RcPool's weak references implement Copy
+
 - Allows iteration over all live pool items
-- Supports manual dropping of items (SlotMap doesn't have strong references so there can't be any automatic dropping)
-- Very fast, constant time allocation and free'ing of items (when not space is not growing)
+- Supports manual dropping of items (when there's zero or one strong reference)
+- Very fast, constant time allocation and free'ing of items (when not needing to allocate more item slots)
 
 Differences:
 
 - SlotMap needs to copy all items when allocating new space, while RC pool simply allocates a new empty page of customizable size
 
-- RcPool references contains direct shared references to the item slot so there's no need to pass around the pool to be able to dereference them. This makes them both safer and more convenient to use.
+- RcPool references contains direct shared references to the item slot so there's no need to pass around a reference to the pool to be able to dereference them. This makes them both safer and more convenient to use.
 
-- RcPool supports strong references with automatic dropping of items, something SlotMap doesn't have
+- RcPool supports strong references with automatic dropping of items, SlotMap doesn't have strong references
 
-- SlotMap keys uses 32-bit version and index, while RC pool's weak references are two machine words (16 bytes on a 64-bit machine). However, one advantage is that a 64-bit version number totally eliminates the risk of version collisions (at most once every 584 years with 1 billion updates per second), and RcPool supports larger pools (2^64 compared to 2^32 items).
+- SlotMap keys are smaller as they consists of a 32-bit index and version number (total of 8 bytes), while RcPool's weak references consists of a shared reference and a 64-bit version number (16 bytes on a 64-bit machine). However, this is not just a downside as using a 64-bit version number totally eliminates the risk of version collisions (at most once every 584 years with 1 billion updates per second), and RcPool supports larger pools (SlotMap is limited to 2^32 items).
+
+- RcPool uses interior mutability so items can be inserted and removed through a shared pool reference. SlotMap requires a mutable reference.

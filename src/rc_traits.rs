@@ -1,6 +1,7 @@
 use std::{
     ops::Deref,
     rc::{Rc, Weak},
+    slice::Iter,
 };
 
 pub trait StrongRefTrait: Deref {
@@ -53,5 +54,35 @@ impl<T> WeakRefTrait for Weak<T> {
 
     fn is_valid(&self) -> bool {
         self.strong_count() > 0
+    }
+}
+
+pub trait WeakSliceExt<T> {
+    fn iter_strong(&self) -> StrongIterator<T>;
+}
+
+impl<V: AsRef<[T]>, T> WeakSliceExt<T> for V {
+    fn iter_strong(&self) -> StrongIterator<T> {
+        StrongIterator {
+            iter: self.as_ref().iter(),
+        }
+    }
+}
+
+pub struct StrongIterator<'t, T> {
+    iter: Iter<'t, T>,
+}
+
+impl<'t, T: WeakRefTrait> Iterator for StrongIterator<'t, T> {
+    type Item = T::Strong;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for r in self.iter.by_ref() {
+            if let Some(sr) = r.strong() {
+                return Some(sr);
+            }
+        }
+
+        None
     }
 }

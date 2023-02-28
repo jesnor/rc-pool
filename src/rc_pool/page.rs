@@ -3,7 +3,7 @@ use crate::{CellTrait, Index, PoolHeader};
 use std::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
-    ops::{Deref, DerefMut},
+    ops::Deref,
 };
 
 pub(crate) struct PageHeader<T> {
@@ -24,6 +24,7 @@ pub(crate) struct Page<T> {
 }
 
 impl<T> Page<T> {
+    #[must_use]
     pub fn new(header: *const PoolHeader<T>, cap: Index, next_page: Option<Box<Page<T>>>) -> Self {
         let mut slots = Vec::with_capacity(cap as usize + 1);
 
@@ -51,12 +52,9 @@ impl<T> Page<T> {
         Self { slots }
     }
 
+    #[must_use]
     pub(crate) fn header(&self) -> &PageHeader<T> {
         unsafe { self.slots.get_unchecked(0).header.deref() }
-    }
-
-    fn header_mut(&mut self) -> &mut PageHeader<T> {
-        unsafe { self.slots.get_unchecked_mut(0).header.deref_mut() }
     }
 
     #[must_use]
@@ -81,7 +79,6 @@ impl<T> Page<T> {
     }
 
     #[must_use]
-    #[allow(clippy::needless_lifetimes)]
     pub(crate) unsafe fn insert(&self, value: T) -> &Slot<T> {
         let header = self.header();
         let index = header.first_free_slot.get() + 1;

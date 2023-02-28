@@ -15,13 +15,33 @@ impl<'t, T, const MANUAL_DROP: bool> WeakRef<'t, T, MANUAL_DROP> {
         }
     }
 
-    pub fn remove(&self) -> bool {
-        if self.is_valid() {
-            self.slot.remove();
+    #[must_use]
+    pub fn try_take_item(&self) -> Option<T> {
+        if self.is_valid() && self.slot.count.get() == 0 {
+            Some(self.slot.take_item())
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    pub fn take_item(&self) -> T {
+        self.try_take_item()
+            .expect("Can't take item with references!")
+    }
+
+    #[must_use]
+    pub fn try_drop_item(&self) -> bool {
+        if self.is_valid() && self.slot.count.get() == 0 {
+            self.slot.take_item();
             true
         } else {
             false
         }
+    }
+
+    pub fn drop_item(&self) {
+        assert!(self.try_drop_item(), "Can't drop item with references!");
     }
 }
 

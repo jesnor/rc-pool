@@ -1,5 +1,5 @@
 use super::slot::Slot;
-use crate::{CellTrait, StrongRefTrait, WeakRef, WeakRefTrait};
+use crate::{CellTrait, Either, StrongRefTrait, WeakRef, WeakRefTrait};
 use std::ops::{Deref, DerefMut};
 
 pub(crate) const MUT_REF_COUNT: u32 = u32::MAX;
@@ -32,16 +32,19 @@ pub struct StrongRef<'t, T, const MANUAL_DROP: bool> {
 }
 
 impl<'t, T, const MANUAL_DROP: bool> StrongRef<'t, T, MANUAL_DROP> {
+    #[must_use]
     pub(crate) fn new(slot: &'t Slot<T>) -> Self {
         slot.count.add(1);
         Self { slot }
     }
 
+    #[must_use]
     pub fn borrow_mut<'u>(&'u mut self) -> RefMut<'u, 't, T, MANUAL_DROP> {
         self.try_borrow_mut()
             .expect("More than one strong reference!")
     }
 
+    #[must_use]
     pub fn try_borrow_mut<'u>(&'u mut self) -> Option<RefMut<'u, 't, T, MANUAL_DROP>> {
         if self.is_unique() {
             self.slot.count.set(MUT_REF_COUNT);
@@ -51,10 +54,36 @@ impl<'t, T, const MANUAL_DROP: bool> StrongRef<'t, T, MANUAL_DROP> {
         }
     }
 
-    pub fn remove(self) {
-        let slot = self.slot;
-        drop(self);
-        slot.remove();
+    #[must_use]
+    pub fn take_item(self) -> T {
+        match self.try_take_item() {
+            Either::Left(v) => v,
+            Either::Right(_) => panic!("Can't take item with strong references!"),
+        }
+    }
+
+    #[must_use]
+    pub fn try_take_item(self) -> Either<T, Self> {
+        if self.is_unique() {
+            Either::Left(self.slot.take_item())
+        } else {
+            Either::Right(self)
+        }
+    }
+
+    pub fn drop_item(self) {
+        assert!(
+            self.try_drop_item().is_none(),
+            "Can't take item with strong references!"
+        );
+    }
+
+    #[must_use]
+    pub fn try_drop_item(self) -> Option<Self> {
+        match self.try_take_item() {
+            Either::Left(_) => None,
+            Either::Right(s) => Some(s),
+        }
     }
 }
 
@@ -98,7 +127,7 @@ impl<'t, T, const MANUAL_DROP: bool> Drop for StrongRef<'t, T, MANUAL_DROP> {
         self.slot.count.sub(1);
 
         if !MANUAL_DROP && self.slot.count.get() == 0 {
-            self.slot.remove();
+            self.slot.take_item();
         }
     }
 }

@@ -1,29 +1,31 @@
-use rc_pool::{RcPool, StrongRef, StrongRefTrait, WeakRef, WeakRefTrait};
+use rc_pool::{RcPool, StrongRef, StrongRefTrait, WeakRef, WeakSliceExt};
 
 const MANUAL_DROP: bool = true;
 
-struct Player<'t> {
+type PlayerRef = StrongRef<'static, Player, MANUAL_DROP>;
+type PlayerWeakRef = WeakRef<'static, Player, MANUAL_DROP>;
+type PlayerPool = RcPool<Player, MANUAL_DROP>;
+type PlayerPoolRef = &'static PlayerPool;
+type GameRef = &'static Game;
+
+struct Player {
     #[allow(unused)]
-    game: GameRef<'t>,
+    game: GameRef,
 
     name: String,
-    friends: Vec<PlayerWeakRef<'t>>,
+    friends: Vec<PlayerWeakRef>,
 }
 
-type PlayerRef<'t> = StrongRef<'t, Player<'t>, MANUAL_DROP>;
-type PlayerWeakRef<'t> = WeakRef<'t, Player<'t>, MANUAL_DROP>;
-type PlayerPool<'t> = RcPool<Player<'t>, MANUAL_DROP>;
-
-struct Game<'t> {
-    players: &'t PlayerPool<'t>,
+struct Game {
+    players: PlayerPoolRef,
 }
 
-impl<'t> Game<'t> {
-    fn new(players: &'t PlayerPool<'t>) -> Self {
+impl Game {
+    fn new(players: PlayerPoolRef) -> Self {
         Self { players }
     }
 
-    fn add_player(&'t self, name: &str) -> PlayerRef<'t> {
+    fn add_player(self: GameRef, name: &str) -> PlayerRef {
         self.players.insert(Player {
             game: self,
             name: name.to_owned(),
@@ -32,31 +34,41 @@ impl<'t> Game<'t> {
     }
 }
 
-impl<'t> PartialEq for Game<'t> {
+impl PartialEq for Game {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self as *const Self, other as *const Self)
     }
 }
 
-type GameRef<'t> = &'t Game<'t>;
-
 fn main() {
-    let players = RcPool::new(1);
-    let game = Game::new(&players);
-    let mut p1 = game.add_player("Sune");
-    let mut p2 = game.add_player("Berra");
-    p1.borrow_mut().friends.push(p2.weak());
-    p2.borrow_mut().friends.push(p1.weak());
+    let players = Box::leak(Box::new(RcPool::new(1)));
+    let game = Box::leak(Box::new(Game::new(players)));
 
-    for _ in 0..2 {
-        for p in game.players.iter() {
-            println!("{}", p.name);
+    {
+        let mut p1 = game.add_player("Sune");
+        let mut p2 = game.add_player("Berra");
+        let mut p3 = game.add_player("Arne");
+        let mut p4 = game.add_player("Svenne");
 
-            for f in p.friends.iter().flat_map(|r| r.strong()) {
-                println!("  {}", f.name);
-            }
+        p1.borrow_mut().friends.push(p2.weak());
+        p1.borrow_mut().friends.push(p3.weak());
+        p2.borrow_mut().friends.push(p1.weak());
+        p2.borrow_mut().friends.push(p4.weak());
+        p3.borrow_mut().friends.push(p1.weak());
+        p3.borrow_mut().friends.push(p2.weak());
+        p3.borrow_mut().friends.push(p4.weak());
+        p4.borrow_mut().friends.push(p3.weak());
+    }
 
-            println!();
+    // Since MANUAL_DROP is true, players are not dropped when all strong references are dropped
+    // You can still iterate over live player slots in the pool to obtain strong references
+    for p in game.players.iter() {
+        println!("{}", p.name);
+
+        for f in p.friends.iter_strong() {
+            println!("  {}", f.name);
         }
+
+        println!();
     }
 }

@@ -77,6 +77,7 @@ impl<T> CellTrait<T> for Cell<T> {
     fn as_ptr(&self) -> *mut T {
         self.as_ptr()
     }
+
     fn set(&self, value: T) {
         self.set(value)
     }

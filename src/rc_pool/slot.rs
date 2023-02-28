@@ -32,13 +32,6 @@ impl<T> Slot<T> {
         self.incr_version();
     }
 
-    unsafe fn drop_value(&self) {
-        debug_assert!(!self.is_free());
-        debug_assert!(self.count.get() == 0);
-        (*self.value.get()).assume_init_drop();
-        self.incr_version();
-    }
-
     pub(crate) fn is_free(&self) -> bool {
         self.version.get() & 1 == 0
     }
@@ -51,19 +44,21 @@ impl<T> Slot<T> {
         unsafe { &*(self as *const Slot<T>).offset(-(self.index.get() as isize)) }
     }
 
-    pub(crate) fn remove(&self) {
-        assert_eq!(
-            self.count.get(),
-            0,
-            "Can't remove item with strong references!"
+    pub(crate) fn take_item(&self) -> T {
+        debug_assert!(!self.is_free());
+
+        debug_assert!(
+            self.count.get() == 0,
+            "Can't take item with strong references!"
         );
 
-        unsafe { self.drop_value() };
+        self.incr_version();
         let index = self.index.get();
         let head = unsafe { self.head() };
         self.index.set(head.index.get());
         head.index.set(index);
         head.count.sub(1);
+        unsafe { (*self.value.get()).assume_init_read() }
     }
 }
 

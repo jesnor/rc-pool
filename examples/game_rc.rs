@@ -6,14 +6,15 @@ use std::{
     rc::{Rc, Weak},
 };
 
+type GameRef = Rc<Game>;
+type PlayerRef = Rc<Player>;
+type PlayerWeakRef = Weak<Player>;
+
 struct Player {
     game: GameRef,
     name: String,
     friends: RefCell<Vec<PlayerWeakRef>>,
 }
-
-type PlayerRef = Rc<Player>;
-type PlayerWeakRef = Weak<Player>;
 
 impl PartialEq for Player {
     fn eq(&self, other: &Self) -> bool {
@@ -24,8 +25,6 @@ impl PartialEq for Player {
 struct Game {
     players: RefCell<Vec<PlayerRef>>,
 }
-
-type GameRef = Rc<Game>;
 
 impl Game {
     fn new() -> Self {
@@ -59,15 +58,13 @@ fn main() {
     p1.friends.borrow_mut().push(p2.weak());
     p2.friends.borrow_mut().push(p1.weak());
 
-    for _ in 0..2 {
-        for p in game.players.borrow().iter() {
-            println!("{}", p.name);
+    for p in game.players.borrow().iter() {
+        println!("{}", p.name);
 
-            for f in p.friends.borrow().iter().flat_map(|r| r.strong()) {
-                println!("  {}", f.name);
-            }
-
-            println!();
+        for f in p.friends.borrow().iter().flat_map(|r| r.strong()) {
+            println!("  {}", f.name);
         }
+
+        println!();
     }
 }
