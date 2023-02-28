@@ -3,6 +3,7 @@ use crate::{CellTrait, Index, PoolHeader};
 use std::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
+    num::NonZeroUsize,
     ops::Deref,
 };
 
@@ -41,8 +42,8 @@ impl<T> Page<T> {
         for i in 1..slots.capacity() {
             slots.push(SlotUnion {
                 slot: ManuallyDrop::new(Slot {
-                    value: MaybeUninit::uninit().into(),
-                    version: 0.into(),
+                    item: MaybeUninit::uninit().into(),
+                    version: Cell::new(NonZeroUsize::new(1).unwrap()),
                     count: 0.into(),
                     index: (i as Index).into(),
                 }),

@@ -3,10 +3,11 @@ use crate::CellTrait;
 use std::{
     cell::{Cell, UnsafeCell},
     mem::MaybeUninit,
+    num::NonZeroUsize,
 };
 
 pub struct Slot<T> {
-    pub(crate) value: UnsafeCell<MaybeUninit<T>>,
+    pub(crate) item: UnsafeCell<MaybeUninit<T>>,
     pub(crate) version: Cell<Version>,
     pub(crate) count: Cell<Count>,
     pub(crate) index: Cell<Index>,
@@ -16,28 +17,29 @@ impl<T> Slot<T> {
     #[must_use]
     pub(crate) unsafe fn get(&self) -> &T {
         debug_assert!(self.count.get() > 0);
-        (*self.value.get()).assume_init_ref()
+        (*self.item.get()).assume_init_ref()
     }
 
     #[must_use]
     #[allow(clippy::mut_from_ref)]
     pub(crate) unsafe fn get_mut(&self) -> &mut T {
-        (*self.value.get()).assume_init_mut()
+        (*self.item.get()).assume_init_mut()
     }
 
     pub(crate) unsafe fn set_value(&self, value: T) {
         debug_assert!(self.is_free());
         debug_assert!(self.count.get() == 0);
-        (*self.value.get()).write(value);
+        (*self.item.get()).write(value);
         self.incr_version();
     }
 
     pub(crate) fn is_free(&self) -> bool {
-        self.version.get() & 1 == 0
+        self.version.get().get() & 1 == 1
     }
 
     fn incr_version(&self) {
-        self.version.set(self.version.get().wrapping_add(1));
+        self.version
+            .set(unsafe { NonZeroUsize::new_unchecked(self.version.get().get() + 1) });
     }
 
     unsafe fn head(&self) -> &Slot<T> {
@@ -58,15 +60,15 @@ impl<T> Slot<T> {
         self.index.set(head.index.get());
         head.index.set(index);
         head.count.sub(1);
-        unsafe { (*self.value.get()).assume_init_read() }
+        unsafe { (*self.item.get()).assume_init_read() }
     }
 }
 
 impl<T> Default for Slot<T> {
     fn default() -> Self {
         Self {
-            value: UnsafeCell::new(MaybeUninit::uninit()),
-            version: 0.into(),
+            item: UnsafeCell::new(MaybeUninit::uninit()),
+            version: unsafe { NonZeroUsize::new_unchecked(1).into() },
             count: 0.into(),
             index: 0.into(),
         }
