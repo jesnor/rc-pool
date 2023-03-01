@@ -1,11 +1,15 @@
 use std::{
-    ops::Deref,
+    ops::{Deref, DerefMut},
     rc::{Rc, Weak},
     slice::Iter,
 };
 
 pub trait StrongRefTrait: Deref {
     type Weak: WeakRefTrait<Target = Self::Target>;
+
+    type RefMut<'t>: DerefMut<Target = Self::Target>
+    where
+        Self: 't;
 
     #[must_use]
     fn weak(&self) -> Self::Weak;
@@ -17,6 +21,9 @@ pub trait StrongRefTrait: Deref {
     fn is_unique(&self) -> bool {
         self.strong_count() == 1
     }
+
+    #[must_use]
+    fn get_mut(&mut self) -> Option<Self::RefMut<'_>>;
 }
 
 pub trait WeakRefTrait {
@@ -34,6 +41,7 @@ pub trait WeakRefTrait {
 
 impl<T> StrongRefTrait for Rc<T> {
     type Weak = Weak<T>;
+    type RefMut<'t> = &'t mut T where Self: 't;
 
     fn weak(&self) -> Self::Weak {
         Rc::downgrade(self)
@@ -41,6 +49,11 @@ impl<T> StrongRefTrait for Rc<T> {
 
     fn strong_count(&self) -> usize {
         Rc::strong_count(self)
+    }
+
+    #[must_use]
+    fn get_mut(&mut self) -> Option<&mut Self::Target> {
+        Rc::get_mut(self)
     }
 }
 

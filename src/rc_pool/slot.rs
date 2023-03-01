@@ -1,5 +1,4 @@
 use super::{Count, Index, Version};
-use crate::CellTrait;
 use std::{
     cell::{Cell, UnsafeCell},
     mem::MaybeUninit,
@@ -59,7 +58,6 @@ impl<T> Slot<T> {
         let head = unsafe { self.head() };
         self.index.set(head.index.get());
         head.index.set(index);
-        head.count.sub(1);
         unsafe { (*self.item.get()).assume_init_read() }
     }
 }

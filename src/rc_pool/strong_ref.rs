@@ -39,13 +39,12 @@ impl<'t, T, const MANUAL_DROP: bool> StrongRef<'t, T, MANUAL_DROP> {
     }
 
     #[must_use]
-    pub fn borrow_mut<'u>(&'u mut self) -> RefMut<'u, 't, T, MANUAL_DROP> {
-        self.try_borrow_mut()
-            .expect("More than one strong reference!")
+    pub fn get_mut<'u>(&'u mut self) -> RefMut<'u, 't, T, MANUAL_DROP> {
+        self.try_get_mut().expect("More than one strong reference!")
     }
 
     #[must_use]
-    pub fn try_borrow_mut<'u>(&'u mut self) -> Option<RefMut<'u, 't, T, MANUAL_DROP>> {
+    pub fn try_get_mut<'u>(&'u mut self) -> Option<RefMut<'u, 't, T, MANUAL_DROP>> {
         if self.is_unique() {
             self.slot.count.set(MUT_REF_COUNT);
             Some(RefMut { r: self })
@@ -147,11 +146,17 @@ impl<'t, T, const MANUAL_DROP: bool> TryFrom<WeakRef<'t, T, MANUAL_DROP>>
 impl<'t, T, const MANUAL_DROP: bool> StrongRefTrait for StrongRef<'t, T, MANUAL_DROP> {
     type Weak = WeakRef<'t, T, MANUAL_DROP>;
 
+    type RefMut<'u> = RefMut<'u, 't, T, MANUAL_DROP> where Self: 'u;
+
     fn weak(&self) -> Self::Weak {
         WeakRef::new(self.slot)
     }
 
     fn strong_count(&self) -> usize {
         self.slot.count.get() as usize
+    }
+
+    fn get_mut(&mut self) -> Option<Self::RefMut<'_>> {
+        self.try_get_mut()
     }
 }
