@@ -58,6 +58,8 @@ fn main() {
         p3.borrow_mut().friends.push(p2.weak());
         p3.borrow_mut().friends.push(p4.weak());
         p4.borrow_mut().friends.push(p3.weak());
+
+        p4.drop_item();
     }
 
     // Since MANUAL_DROP is true, players are not dropped when all strong references are dropped

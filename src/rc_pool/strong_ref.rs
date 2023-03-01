@@ -65,7 +65,9 @@ impl<'t, T, const MANUAL_DROP: bool> StrongRef<'t, T, MANUAL_DROP> {
     #[must_use]
     pub fn try_take_item(self) -> Either<T, Self> {
         if self.is_unique() {
-            Either::Left(self.slot.take_item())
+            let slot = self.slot;
+            drop(self);
+            Either::Left(slot.take_item())
         } else {
             Either::Right(self)
         }
